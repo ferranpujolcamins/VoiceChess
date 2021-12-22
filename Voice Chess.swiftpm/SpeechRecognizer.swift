@@ -3,14 +3,13 @@ import Foundation
 import Speech
 import SwiftUI
 
-
-// TODO: allow recognizion language to be set in settings
 class SpeechRecognizer: ObservableObject {
     enum RecognizerError: Error {
         case nilRecognizer
         case notAuthorizedToRecognize
         case notPermittedToRecord
         case recognizerIsUnavailable
+        case onDeviceRecognitionNotSupported
         
         var message: String {
             switch self {
@@ -18,6 +17,7 @@ class SpeechRecognizer: ObservableObject {
             case .notAuthorizedToRecognize: return "Not authorized to recognize speech"
             case .notPermittedToRecord: return "Not permitted to record audio"
             case .recognizerIsUnavailable: return "Recognizer is unavailable"
+            case .onDeviceRecognitionNotSupported: return "On-device speech recognition is not supported"
             }
         }
     }
@@ -30,7 +30,7 @@ class SpeechRecognizer: ObservableObject {
     private let recognizer: SFSpeechRecognizer?
     
     init() {
-        recognizer = SFSpeechRecognizer()
+        recognizer = SFSpeechRecognizer(locale: Locale(identifier: "en_US"))
         
         Task(priority: .background) {
             do {
@@ -39,6 +39,9 @@ class SpeechRecognizer: ObservableObject {
                 }
                 guard await SFSpeechRecognizer.hasAuthorizationToRecognize() else {
                     throw RecognizerError.notAuthorizedToRecognize
+                }
+                guard recognizer?.supportsOnDeviceRecognition ?? false else {
+                    throw RecognizerError.onDeviceRecognitionNotSupported
                 }
                 guard await AVAudioSession.sharedInstance().hasPermissionToRecord() else {
                     throw RecognizerError.notPermittedToRecord
@@ -95,6 +98,7 @@ class SpeechRecognizer: ObservableObject {
         
         do {
             request.shouldReportPartialResults = true
+            request.requiresOnDeviceRecognition = true
         
             let audioSession = AVAudioSession.sharedInstance()
             try audioSession.setCategory(.record, mode: .measurement, options: .duckOthers)
@@ -115,7 +119,6 @@ class SpeechRecognizer: ObservableObject {
     }
     
     private func recognitionHandler(result: SFSpeechRecognitionResult?, error: Error?) {
-        print("handler")
         let receivedFinalResult = result?.isFinal ?? false
         let receivedError = error != nil
         
